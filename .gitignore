@@ -1,0 +1,5 @@
+__pycache__/
+cronjob_last_exec.log
+.env
+!.gitignore
+
