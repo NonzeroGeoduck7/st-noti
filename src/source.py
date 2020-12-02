@@ -1,8 +1,10 @@
 from lxml import html, etree
-from datetime import datetime, timezone
+from dateutil import parser
+from datetime import datetime
 from settings import *
 import requests
 import yagmail
+import pytz
 import sys
 
 verbose = True
@@ -48,7 +50,7 @@ def steamTradesComments(link):
     return url, new_comments
 
 def barterComments(link):
-    url = link + '/o'
+    url = link + 'o/'
 
     page = requests.get(url, headers=headers)
     tree = html.fromstring(page.content)
@@ -61,12 +63,8 @@ def barterComments(link):
     for c in comments:
         try:
 
-            ########
-            # href link ends with slash
-            ########
-            
             if not(
-                c[2].attrib['href'][:-1] != link # its not me that initiated
+                c[2].attrib['href'] != link # its not me that initiated
                 ):
                 continue
 
@@ -74,11 +72,13 @@ def barterComments(link):
             offer = c.xpath('.//a[text() = "offer"]')
 
             # if comment is edited, there are 2 span elements in date
-            dt = datetime.fromisoformat(time[0].attrib['datetime'])
+            dt = parser.parse(time[0].attrib['datetime'])
 
-            if verbose: print("{} seconds ago: {} ({} texts found)".format((datetime.now(timezone.utc) - dt).total_seconds(), offer[0].attrib['href'], len(offer)))
+            time_now = datetime.utcnow()
+            time_now = time_now.replace(tzinfo=pytz.utc)
+            if verbose: print("{} seconds ago: {} ({} texts found)".format((time_now - dt).total_seconds(), offer[0].attrib['href'], len(offer)))
 
-            if (datetime.now(timezone.utc) - dt).total_seconds() < run_frequency*86400:
+            if (time_now - dt).total_seconds() < run_frequency_in_h*3600:
                 # new comment found
                 new_comments.append((dt,offer[0].attrib['href']))
 
