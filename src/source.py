@@ -1,5 +1,5 @@
 from lxml import html, etree
-from datetime import datetime
+from datetime import datetime, timezone
 from settings import *
 import requests
 import yagmail
@@ -15,10 +15,7 @@ DATE_NOW = datetime.now()
 
 headers = {"User-agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36"}
 
-results = []
-
-for link in links_to_check:
-
+def steamTradesComments(link):
     url = link + '/search?page=last'
 
     page = requests.get(url, headers=headers)
@@ -48,13 +45,69 @@ for link in links_to_check:
         except:
             print("Unexpected error:", sys.exc_info())
 
+    return url, new_comments
+
+def barterComments(link):
+    url = link + '/o'
+
+    page = requests.get(url, headers=headers)
+    tree = html.fromstring(page.content)
+
+    comments = tree.xpath('//ul[@class="activity"]//li')
+
+    if verbose: print("found {} comments.".format(len(comments)))
+
+    new_comments = []
+    for c in comments:
+        try:
+
+            ########
+            # href link ends with slash
+            ########
+            
+            if not(
+                c[2].attrib['href'][:-1] != link # its not me that initiated
+                ):
+                continue
+
+            time = c.xpath('.//time')
+            offer = c.xpath('.//a[text() = "offer"]')
+
+            # if comment is edited, there are 2 span elements in date
+            dt = datetime.fromisoformat(time[0].attrib['datetime'])
+
+            if verbose: print("{} seconds ago: {} ({} texts found)".format((datetime.now(timezone.utc) - dt).total_seconds(), offer[0].attrib['href'], len(offer)))
+
+            if (datetime.now(timezone.utc) - dt).total_seconds() < run_frequency*86400:
+                # new comment found
+                new_comments.append((dt,offer[0].attrib['href']))
+
+        except (TypeError, IndexError) as e:
+            print("TypeError ", e)
+            pass
+        except:
+            print("Unexpected error:", sys.exc_info())
+
+    return url,new_comments
+
+
+results = []
+
+for link in links_to_check:
+
+    new_comments = []
+    if 'barter.vg' in link:
+        url,new_comments = barterComments(link)
+    elif 'steamtrades.com' in link:
+        url,new_comments = steamTradesComments(link)
+        
     if len(new_comments) > 0:
         results.append((url, new_comments))
 
 # send mail
 if len(results) > 0:
     
-    subject = 'New comments on steamtrades.com'
+    subject = 'New comments for steam trades'
 
     content_string = 'Found these new comments (checked last ' + str(run_frequency_in_h) + ' hours):\n'
 
