@@ -64,7 +64,8 @@ def barterComments(link):
         try:
 
             if not(
-                c[2].attrib['href'] != link # its not me that initiated
+                c[2].attrib['href'] != link and        # its not me that initiated
+                ' proposed ' in c.xpath('./text()')    # its an offer proposal
                 ):
                 continue
 
