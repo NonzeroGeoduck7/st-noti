@@ -4,8 +4,10 @@ from datetime import datetime
 from settings import *
 import requests
 import yagmail
+import pickle
 import pytz
 import sys
+import os
 
 verbose = True
 if verbose:
@@ -13,7 +15,15 @@ if verbose:
 else:
     print("Starting job, verbose = FALSE")
 
-DATE_NOW = datetime.now()
+LAST_CHECK = datetime.fromtimestamp(0)
+now = datetime.now()
+
+# load time stamp
+last_check_file = "last_check.p"
+if os.path.exists(last_check_file):
+    with open(last_check_file, "rb") as f:
+        LAST_CHECK = pickle.load(f)
+
 
 headers = {"User-agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36"}
 
@@ -36,9 +46,9 @@ def steamTradesComments(link):
             # if comment is edited, there are 2 span elements in date
             dt = datetime.fromtimestamp(int(date[-1].attrib['data-timestamp']))
 
-            if verbose: print("{} seconds ago: {} ({} texts found)".format((DATE_NOW - dt).total_seconds(), text[0].text_content(), len(text)))
+            if verbose: print("{} seconds ago: {} ({} texts found)".format((datetime.now() - dt).total_seconds(), text[0].text_content(), len(text)))
 
-            if (DATE_NOW - dt).total_seconds() < run_frequency_in_h*3600:
+            if (dt - LAST_CHECK).total_seconds() > 0:
                 # new comment found
                 new_comments.append((dt,text[0].text_content()))
 
@@ -64,8 +74,9 @@ def barterComments(link):
         try:
 
             if not(
-                c[2].attrib['href'] != link and        # its not me that initiated
-                ' proposed ' in c.xpath('./text()')    # its an offer proposal
+                c[2].attrib['href'] != link and           # its not me that initiated
+                (' proposed ' in c.xpath('./text()') or   # its an offer proposal
+                ' accepted ' in c.xpath('./text()'))      # your offer has been accepted
                 ):
                 continue
 
@@ -75,13 +86,12 @@ def barterComments(link):
             # if comment is edited, there are 2 span elements in date
             dt = parser.parse(time[0].attrib['datetime'])
 
-            time_now = datetime.utcnow()
-            time_now = time_now.replace(tzinfo=pytz.utc)
-            if verbose: print("{} seconds ago: {} ({} texts found)".format((time_now - dt).total_seconds(), offer[0].attrib['href'], len(offer)))
+            last_check_formatted = LAST_CHECK.replace(tzinfo=pytz.utc)
+            if verbose: print("{} seconds ago: {} ({} texts found)".format((datetime.utcnow().replace(tzinfo=pytz.utc) - dt).total_seconds(), offer[0].attrib['href'], len(offer)))
 
-            if (time_now - dt).total_seconds() < run_frequency_in_h*3600:
+            if (dt - last_check_formatted).total_seconds() > 0:
                 # new comment found
-                new_comments.append((dt,offer[0].attrib['href']))
+                new_comments.append((dt,c.xpath('./text()')[2]+":"+offer[0].attrib['href']))
 
         except (TypeError, IndexError) as e:
             print("TypeError ", e)
@@ -110,7 +120,7 @@ if len(results) > 0:
     
     subject = 'New comments for steam trades'
 
-    content_string = 'Found these new comments (checked last ' + str(run_frequency_in_h) + ' hours):\n'
+    content_string = 'Found these new comments:'
 
     for (link,comments) in results:
         content_string = content_string + '\n' + link + '\n\n'
@@ -128,3 +138,6 @@ if len(results) > 0:
 
 else:
     print('Job finished, no email sent')
+
+with open(last_check_file, "wb") as f:
+    pickle.dump(now, f)

@@ -11,4 +11,3 @@ gmail_name = os.getenv("GMAIL_USERNAME")
 gmail_pw = os.getenv("GMAIL_PASSWORD")
 
 my_username = os.getenv("MY_USERNAME")
-run_frequency_in_h = int(os.getenv("RUN_FREQUENCY_IN_H"))
